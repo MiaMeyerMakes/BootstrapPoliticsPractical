@@ -1,0 +1,48 @@
+---
+title: "Practical Project 1"
+author: "M Meyer (22675760)"
+date: "2024-10-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Expected Analyses
+
+Each of the 4 sections should contain at least one application of resampling. Provide the details in your technical report; your report to your friend only needs to show as much as you need to demonstrate to him whether the approach “worked” or not.
+
+### 1. Handle the missing values in the dataset in a way that you feel is justified in the circumstances (include details in technical report; use resampling)
+
+```{r}
+install.packages("~/Desktop/Bootstrap B/Practical Project/robustbase_0.99-4-1.tgz", repos = NULL, type = .Platform$pkgType)
+
+library(VIM) # struggle!
+library(mice)
+```
+
+
+### 2. Conduct a principal components analysis using all the variables in the dataset:
+
+#### Investigate the proportion of variation explained by the first or the first two components (some definitions of the political spectrum use economic and social axes separately)
+
+#### Interpret the coefficients and/or the correlations between the variables and the components and compare your interpretation to how the left-wing/right-wing political spectrum is viewed in the country where the data were collected.
+
+#### Could the first or first two components serve as a scale for left/right political orientation?
+
+### 3. Consider whether the principal components from step 2 could be used to “smooth out” the results of the two variables recording the statements the respondents agreed with, mLeft and mRight:
+
+#### Plot the first principal component against each of mLeft and mRight, and add bootstrapped loess curves to the plots;
+
+#### Decide on a suitable model and fit a model predicting PC1 from mLeft and mRight.
+
+#### Could the predicted value 𝑦" from this model function as a smoothed composite of mLeft and mRight? Why or why not?
+
+
+### 4. Investigate whether a cluster-based solution would be a better option:
+
+#### Form clusters using the method you think would be most suited to the problem, and evaluate the quality of the clustering. As these are convenience clusters, you may prefer to use the more sharply separated cluster allocations from e.g. a discriminant analysis.
+
+#### Profile the clusters you find and decide for each cluster where on the political spectrum you would place it. Do the cluster profiles agree with expected political spectrum patterns?
+
