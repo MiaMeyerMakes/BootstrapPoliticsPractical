@@ -9,6 +9,20 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 
 poldat <- read.csv("Political spectrum.csv", header=TRUE)
+poldat <- poldat[,-1]
+# Save the numeric version before making some variables factors.
+polnum <- poldat
+
+# Make sure to specify ordinal variables
+poldat$LGBT <- factor(poldat$LGBT, 
+                             levels = 1:6, 
+                             ordered = TRUE)  # Ensure it's ordered
+poldat$mLeft <- factor(poldat$mLeft, 
+                             levels = 1:8, 
+                             ordered = TRUE)  # Ensure it's ordered
+poldat$mRight <- factor(poldat$mRight, 
+                             levels = 1:8, 
+                             ordered = TRUE)  # Ensure it's ordered
 head(poldat)
 
 # install.packages("~/Desktop/Bootstrap B/Practical Project/robustbase_0.99-4-1.tgz", repos = NULL, type = .Platform$pkgType)
@@ -17,23 +31,23 @@ library(VIM) # struggle!
 library(mice)
 library(ggplot2)
 library(bipl5)
+library(factoextra) # For PCA visualization
+library(gridExtra)
 ```
+
 *Remember to set the specific variables as ordinal variables!! Look at data description.*
 
 ## Expected Analyses
 
-Each of the 4 sections should contain at least one application of resampling. Provide the details in your technical report; your report to your friend only needs to show as much as you need to demonstrate to him whether the approach “worked” or not.
+Each of the 4 sections should contain at least one application of resampling. Provide the details in your technical report; your report to your friend only needs to show as much as you need to demonstrate to him whether the approach "worked" or not.
 
 ### 1. Handle the missing values in the dataset in a way that you feel is justified in the circumstances (include details in technical report; use resampling)
 
 ```{r}
-aggr(poldat, prop = c(TRUE, FALSE))
 aggr(poldat, prop = c(TRUE, FALSE))$missings
-# summary(aggr(poldat)) # leave out for now because printing too much
 ```
 
-Economic and environment always missing together
-pCongress, pBusiness, tCongress, tBusiness also missing together (majority of missing combos is of all 4 of these)
+Economic and environment always missing together pCongress, pBusiness, tCongress, tBusiness also missing together (majority of missing combos is of all 4 of these)
 
 A `matrixplot` visualizes all cells of the data matrix by rectangles. Observed data are shown in a continuous grey-black color scheme (the darker the color, the higher the value), while missing values are highlighted in red. It's a good practice to sort the data by one of the incomplete variables - it makes the plot easier to interpret.
 
@@ -44,31 +58,31 @@ Safe to say the data is not MCAR.
 ```{r}
 matrixplot(poldat, sortby = c('tCongress'))
 ```
+
 Now using the `mice` package. Columns that need not be imputed have the empty method `""` and `pmm` stands for Predictive mean matching.
 
-```{r}
+```{r warning=FALSE}
+set.seed(777)
 md.pattern(poldat, plot=TRUE)
 
 # Impute the missing values
-polImp <- mice(poldat,m=5,maxit=50,meth='pmm',seed=500, print=FALSE)
-summary(polImp)
+polImp <- mice(poldat ,m=5,maxit=10,meth='pmm',seed=500, print=FALSE)
+polnumImp <- mice(polnum ,m=5,maxit=10,meth='pmm',seed=500, print=FALSE)
+# summary(polImp)
+
 
 poldatImp <- complete(polImp, 1)
+polNumImp <- complete(polnumImp,1)
+head(poldatImp)
 ```
 
-Ok, but now we remember that we need to use resampling...
+Predictive Mean Matching (PMM) in the mice package involves a form of **resampling**. PMM is a semi-parametric imputation method that combines the benefits of predictive modeling and resampling techniques to impute missing values in a realistic way, especially for continuous variables.
 
-Note from slide 7 in Assignment 13b what it is that we want to do. But at this stage we don't even know what we want to calculate so how can we perform Bootstrap to get the statistic at this point?
-In *single imputation*, you set `m=1` in `mice` (I think) if you want to make a single call to `mice`.
-
-So I should probably do **predictive mean matching**... from slide 8 in Assignment 13b.
-
-I want to fit a kernel and see if the form is super different after imputing the missing values, but I don't know how to do that for data with more than one predictor variable... The example below just gives code from the `stats` package manual on how the `kernel` and `density` stuff works.
+*I want to fit a kernel and see if the form is super different after imputing the missing values, but I don't know how to do that for data with more than one predictor variable... The example below just gives code from the `stats` package manual on how the `kernel` and `density` stuff works.*
 
 Because even when I ask ChatGPT then it uses a visual via `ggplot` and `geom_density()` to plot the response and only one predictor variable... So I have no idea how to test whether my data still looks good...
 
 ```{r}
-
 ## The available kernels:
 (kernels <- eval(formals(density.default)$kernel))
 
@@ -82,29 +96,181 @@ legend(1.5,.4, legend = kernels, col = seq(kernels),
        lty = 1, cex = .8, y.intersp = 1)
 ```
 
-
 ### 2. Conduct a principal components analysis using all the variables in the dataset:
 
 #### Investigate the proportion of variation explained by the first or the first two components (some definitions of the political spectrum use economic and social axes separately)
 
+Also... **we have to implement resampling somewhere...**. So perhaps use bootstrap to get the loadings of the first two PCs? Look at slide 14 from Assignment 13b.
+
+We can only do scaling on numeric variables... so we use the dataset that still only has numeric variables here.
+
+Or do we just ditch the scaling?
+
 ```{r}
-# x<-PCAbiplot(poldatImp[,-1] ,group=poldatImp[,1])
-# x |> TDAbiplot()
+my_palette <- colorRampPalette(c("blue", "green", "yellow", "red"))(8)
+
+# Scale the data NB for PCA. Note here we are using the numeric dataset
+pol_scaled <- scale(polNumImp)
+
+# Perform PCA
+pca_result <- prcomp(pol_scaled, center = TRUE, scale. = TRUE)
+
+# Step 4: Check the summary of the PCA results
+summary(pca_result)
+
+# Step 5: Visualize the PCA (optional)
+# Plot variance explained by each principal component
+fviz_eig(pca_result)
+
+# Plot individuals (samples) on the principal component map
+fviz_pca_ind(pca_result, 
+             addEllipses = TRUE # Add confidence ellipses
+             ) + 
+  theme_minimal()
+
+# Plot variables (features) on the principal component map
+fviz_pca_var(pca_result, 
+             col.var = "contrib", # Color by contributions to the PCs
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"))
+
 ```
 
+When two vectors are close, forming a small angle, the two variables they represent are positively correlated.
+
+**REPEAT BUT LEAVE OUT `mRight` AND `mLeft`**. Also note that I'm not sure how to interpret the individual plot.
+
+```{r}
+# Scale the data NB for PCA. Note here we are using the numeric dataset
+pol_scaled <- scale(polNumImp[,1:12])
+
+# Perform PCA
+pca_result <- prcomp(pol_scaled, center = TRUE, scale. = TRUE)
+
+# Step 4: Check the summary of the PCA results
+summary(pca_result)
+
+# Step 5: Visualize the PCA (optional)
+# Plot variance explained by each principal component
+fviz_eig(pca_result)
+
+# Plot individuals (samples) on the principal component map
+fviz_pca_ind(pca_result, 
+             addEllipses = TRUE # Add confidence ellipses
+             ) + 
+  theme_minimal()
+
+# Plot variables (features) on the principal component map
+fviz_pca_var(pca_result, 
+             col.var = "contrib", # Color by contributions to the PCs
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"))
+
+```
+
+So together, the first two principal components explain 25% of the variation in the data.
+
+More plots (that I have no idea how to interpret):
+
+```{r}
+pca_ind <- get_pca_ind(pca_result)
+
+# Create a data frame with the first principal component and the species
+pca_comp1 <- data.frame(PC1 = pca_ind$coord[, 1], 
+                     LeftScale = as.factor(polNumImp[,13]))  # Adjust based on your grouping variable
+
+# Create boxplot of the first principal component
+boxplotL1 <- ggplot(pca_comp1, aes(x = LeftScale, y = PC1)) +
+              geom_boxplot(fill = "lightblue", color = "darkblue") +
+              labs(title = "Boxplot of PC1 - mLeft",
+                   x = "mLeft", 
+                   y = "PC1") +
+              theme_minimal()
+
+# Create a data frame with the first principal component and the species
+pca_comp1 <- data.frame(PC1 = pca_ind$coord[, 1], 
+                     RightScale = as.factor(polNumImp[,14]))  # Adjust based on your grouping variable
+
+# Create boxplot of the first principal component
+boxplotR1 <- ggplot(pca_comp1, aes(x = RightScale, y = PC1)) +
+              geom_boxplot(fill = "lightgreen", color = "darkgreen") +
+              labs(title = "Boxplot of PC1 - mRight",
+                   x = "mRight", 
+                   y = "PC1") +
+              theme_minimal()
+
+# Create a data frame with the first principal component and the species
+pca_comp2 <- data.frame(PC2 = pca_ind$coord[, 2], 
+                     LeftScale = as.factor(polNumImp[,13]))  # Adjust based on your grouping variable
+
+# Create boxplot of the first principal component
+boxplotL2 <- ggplot(pca_comp2, aes(x = LeftScale, y = PC2)) +
+              geom_boxplot(fill = "lightblue", color = "darkblue") +
+              labs(title = "Boxplot of PC2 - mLeft",
+                   x = "mLeft", 
+                   y = "PC2") +
+              theme_minimal()
+
+# Create a data frame with the second principal component and the species
+pca_comp2 <- data.frame(PC2 = pca_ind$coord[, 2], 
+                     RightScale = as.factor(polNumImp[,14]))  # Adjust based on your grouping variable
+
+# Create boxplot of the first principal component
+boxplotR2 <- ggplot(pca_comp2, aes(x = RightScale, y = PC2)) +
+              geom_boxplot(fill = "lightgreen", color = "darkgreen") +
+              labs(title = "Boxplot of PC2 - mRight",
+                   x = "mRight", 
+                   y = "PC2") +
+              theme_minimal()
+
+grid.arrange(boxplotL1, boxplotR1, boxplotL2, boxplotR2, ncol = 2, nrow = 2)
+```
 
 #### Interpret the coefficients and/or the correlations between the variables and the components and compare your interpretation to how the left-wing/right-wing political spectrum is viewed in the country where the data were collected.
 
+See note for next section.
+
 #### Could the first or first two components serve as a scale for left/right political orientation?
 
-### 3. Consider whether the principal components from step 2 could be used to “smooth out” the results of the two variables recording the statements the respondents agreed with, mLeft and mRight:
+Answer this question by looking at whether the way they are correlated relates to what we see as left-wing and right-wing. And note where it does not.
+
+### 3. Consider whether the principal components from step 2 could be used to "smooth out" the results of the two variables recording the statements the respondents agreed with, mLeft and mRight:
 
 #### Plot the first principal component against each of mLeft and mRight, and add bootstrapped loess curves to the plots;
 
+Should we do this for scaled data or not? I will assume it is scaled data.
+
+How the heck am I supposed to add a loess curve to this plot loool doesn't look good.
+
+Slide 20 of Assignment 15.
+
+```{r}
+# Create a data frame with the first principal component and the response variable (Species)
+pc1_left <- data.frame(PC1 = pca_ind$coord[, 1], 
+                     mLeft = polNumImp$mLeft,
+                     mRight = polNumImp$mRight)  # Replace with your response variables
+
+# Plot PC1 against mLeft
+PC1mLeft <- ggplot(pc1_left, aes(x = PC1, y = mLeft)) +
+              geom_point(aes(color = mLeft), size = 2) +
+              scale_color_gradient(low = "blue", high = "red") +  # Optional color gradient
+              labs(title = "PC1 vs. mLeft",
+                   x = "PC1", 
+                   y = "mLeft") +
+              theme_minimal()
+
+# Plot PC1 against mRight
+PC1mRight <- ggplot(pc1_left, aes(x = PC1, y = mRight)) +
+              geom_point(aes(color = mRight), size = 2) +
+              scale_color_gradient(low = "green", high = "purple") +  # Optional color gradient
+              labs(title = "PC1 vs. mRight",
+                   x = "PC1", 
+                   y = "mRight") +
+              theme_minimal()
+grid.arrange(PC1mLeft, PC1mRight, ncol = 2)
+```
+
 #### Decide on a suitable model and fit a model predicting PC1 from mLeft and mRight.
 
-#### Could the predicted value 𝑦" from this model function as a smoothed composite of mLeft and mRight? Why or why not?
-
+#### Could the predicted value $\hat{y}$ from this model function as a smoothed composite of mLeft and mRight? Why or why not?
 
 ### 4. Investigate whether a cluster-based solution would be a better option:
 
