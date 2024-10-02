@@ -7,7 +7,18 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+poldat <- read.csv("Political spectrum.csv", header=TRUE)
+head(poldat)
+
+# install.packages("~/Desktop/Bootstrap B/Practical Project/robustbase_0.99-4-1.tgz", repos = NULL, type = .Platform$pkgType)
+
+library(VIM) # struggle!
+library(mice)
+library(ggplot2)
+library(bipl5)
 ```
+*Remember to set the specific variables as ordinal variables!! Look at data description.*
 
 ## Expected Analyses
 
@@ -16,16 +27,71 @@ Each of the 4 sections should contain at least one application of resampling. Pr
 ### 1. Handle the missing values in the dataset in a way that you feel is justified in the circumstances (include details in technical report; use resampling)
 
 ```{r}
-install.packages("~/Desktop/Bootstrap B/Practical Project/robustbase_0.99-4-1.tgz", repos = NULL, type = .Platform$pkgType)
+aggr(poldat, prop = c(TRUE, FALSE))
+aggr(poldat, prop = c(TRUE, FALSE))$missings
+# summary(aggr(poldat)) # leave out for now because printing too much
+```
 
-library(VIM) # struggle!
-library(mice)
+Economic and environment always missing together
+pCongress, pBusiness, tCongress, tBusiness also missing together (majority of missing combos is of all 4 of these)
+
+A `matrixplot` visualizes all cells of the data matrix by rectangles. Observed data are shown in a continuous grey-black color scheme (the darker the color, the higher the value), while missing values are highlighted in red. It's a good practice to sort the data by one of the incomplete variables - it makes the plot easier to interpret.
+
+In the graph you can see how strong the relationship in missing values is between the four business and congress variables and how their missing values are almost clustered.
+
+Safe to say the data is not MCAR.
+
+```{r}
+matrixplot(poldat, sortby = c('tCongress'))
+```
+Now using the `mice` package. Columns that need not be imputed have the empty method `""` and `pmm` stands for Predictive mean matching.
+
+```{r}
+md.pattern(poldat, plot=TRUE)
+
+# Impute the missing values
+polImp <- mice(poldat,m=5,maxit=50,meth='pmm',seed=500, print=FALSE)
+summary(polImp)
+
+poldatImp <- complete(polImp, 1)
+```
+
+Ok, but now we remember that we need to use resampling...
+
+Note from slide 7 in Assignment 13b what it is that we want to do. But at this stage we don't even know what we want to calculate so how can we perform Bootstrap to get the statistic at this point?
+In *single imputation*, you set `m=1` in `mice` (I think) if you want to make a single call to `mice`.
+
+So I should probably do **predictive mean matching**... from slide 8 in Assignment 13b.
+
+I want to fit a kernel and see if the form is super different after imputing the missing values, but I don't know how to do that for data with more than one predictor variable... The example below just gives code from the `stats` package manual on how the `kernel` and `density` stuff works.
+
+Because even when I ask ChatGPT then it uses a visual via `ggplot` and `geom_density()` to plot the response and only one predictor variable... So I have no idea how to test whether my data still looks good...
+
+```{r}
+
+## The available kernels:
+(kernels <- eval(formals(density.default)$kernel))
+
+
+## show the kernels in the R parametrization
+plot (density(0, bw = 1), xlab = "",
+      main = "R's density() kernels with bw = 1")
+for(i in 2:length(kernels))
+   lines(density(0, bw = 1, kernel =  kernels[i]), col = i)
+legend(1.5,.4, legend = kernels, col = seq(kernels),
+       lty = 1, cex = .8, y.intersp = 1)
 ```
 
 
 ### 2. Conduct a principal components analysis using all the variables in the dataset:
 
 #### Investigate the proportion of variation explained by the first or the first two components (some definitions of the political spectrum use economic and social axes separately)
+
+```{r}
+# x<-PCAbiplot(poldatImp[,-1] ,group=poldatImp[,1])
+# x |> TDAbiplot()
+```
+
 
 #### Interpret the coefficients and/or the correlations between the variables and the components and compare your interpretation to how the left-wing/right-wing political spectrum is viewed in the country where the data were collected.
 
@@ -45,4 +111,3 @@ library(mice)
 #### Form clusters using the method you think would be most suited to the problem, and evaluate the quality of the clustering. As these are convenience clusters, you may prefer to use the more sharply separated cluster allocations from e.g. a discriminant analysis.
 
 #### Profile the clusters you find and decide for each cluster where on the political spectrum you would place it. Do the cluster profiles agree with expected political spectrum patterns?
-
