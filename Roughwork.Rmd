@@ -41,13 +41,20 @@ library(gridExtra)
 
 Each of the 4 sections should contain at least one application of resampling. Provide the details in your technical report; your report to your friend only needs to show as much as you need to demonstrate to him whether the approach "worked" or not.
 
+Before starting with the analyses, I just check whether there are any duplicated data entries. This might be important later on. We see that there are not any duplicate cases.
+
+```{r}
+sum(duplicated(poldat))
+```
+
+
 ### 1. Handle the missing values in the dataset in a way that you feel is justified in the circumstances (include details in technical report; use resampling)
 
 ```{r}
 aggr(poldat, prop = c(TRUE, FALSE))$missings
 ```
 
-Economic and environment always missing together pCongress, pBusiness, tCongress, tBusiness also missing together (majority of missing combos is of all 4 of these)
+Economic and environment always missing together `pCongress`, `pBusiness`, `tCongress`, `tBusiness` also missing together (majority of missing combos is of all 4 of these)
 
 A `matrixplot` visualizes all cells of the data matrix by rectangles. Observed data are shown in a continuous grey-black color scheme (the darker the color, the higher the value), while missing values are highlighted in red. It's a good practice to sort the data by one of the incomplete variables - it makes the plot easier to interpret.
 
@@ -107,13 +114,11 @@ We can only do scaling on numeric variables... so we use the dataset that still 
 Or do we just ditch the scaling?
 
 ```{r}
-my_palette <- colorRampPalette(c("blue", "green", "yellow", "red"))(8)
-
 # Scale the data NB for PCA. Note here we are using the numeric dataset
-pol_scaled <- scale(polNumImp)
+pol_scaled <- data.frame(scale(polNumImp))
 
 # Perform PCA
-pca_result <- prcomp(pol_scaled, center = TRUE, scale. = TRUE)
+pca_result <- prcomp(pol_scaled)
 
 # Step 4: Check the summary of the PCA results
 summary(pca_result)
@@ -139,28 +144,30 @@ When two vectors are close, forming a small angle, the two variables they repres
 
 **REPEAT BUT LEAVE OUT `mRight` AND `mLeft`**. Also note that I'm not sure how to interpret the individual plot.
 
+It seems that leaving them out gives super non-informative answers and plots so continue using `mLeft` and `mRight` and just mention that this was considered.
+
 ```{r}
 # Scale the data NB for PCA. Note here we are using the numeric dataset
-pol_scaled <- scale(polNumImp[,1:12])
+pol_scaled0 <- scale(polNumImp[,1:12])
 
 # Perform PCA
-pca_result <- prcomp(pol_scaled, center = TRUE, scale. = TRUE)
+pca_result0 <- prcomp(pol_scaled0, center = TRUE, scale. = TRUE)
 
 # Step 4: Check the summary of the PCA results
-summary(pca_result)
+summary(pca_result0)
 
 # Step 5: Visualize the PCA (optional)
 # Plot variance explained by each principal component
-fviz_eig(pca_result)
+fviz_eig(pca_result0)
 
 # Plot individuals (samples) on the principal component map
-fviz_pca_ind(pca_result, 
+fviz_pca_ind(pca_result0, 
              addEllipses = TRUE # Add confidence ellipses
              ) + 
   theme_minimal()
 
 # Plot variables (features) on the principal component map
-fviz_pca_var(pca_result, 
+fviz_pca_var(pca_result0, 
              col.var = "contrib", # Color by contributions to the PCs
              gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"))
 
@@ -174,51 +181,46 @@ More plots (that I have no idea how to interpret):
 pca_ind <- get_pca_ind(pca_result)
 
 # Create a data frame with the first principal component and the species
-pca_comp1 <- data.frame(PC1 = pca_ind$coord[, 1], 
-                     LeftScale = as.factor(polNumImp[,13]))  # Adjust based on your grouping variable
+pca_comps <- data.frame(PC1 = pca_ind$coord[, 1], 
+                        PC2 = pca_ind$coord[, 2],
+                        LeftScale = as.factor(pol_scaled$mLeft),
+                        RightScale = as.factor(pol_scaled$mRight)
+                        )
 
 # Create boxplot of the first principal component
-boxplotL1 <- ggplot(pca_comp1, aes(x = LeftScale, y = PC1)) +
+boxplotL1 <- ggplot(pca_comps, aes(x = LeftScale, y = PC1)) +
               geom_boxplot(fill = "lightblue", color = "darkblue") +
               labs(title = "Boxplot of PC1 - mLeft",
                    x = "mLeft", 
                    y = "PC1") +
+  scale_x_discrete(labels = as.character(1:8)) +
               theme_minimal()
 
-# Create a data frame with the first principal component and the species
-pca_comp1 <- data.frame(PC1 = pca_ind$coord[, 1], 
-                     RightScale = as.factor(polNumImp[,14]))  # Adjust based on your grouping variable
-
 # Create boxplot of the first principal component
-boxplotR1 <- ggplot(pca_comp1, aes(x = RightScale, y = PC1)) +
+boxplotR1 <- ggplot(pca_comps, aes(x = RightScale, y = PC1)) +
               geom_boxplot(fill = "lightgreen", color = "darkgreen") +
               labs(title = "Boxplot of PC1 - mRight",
                    x = "mRight", 
                    y = "PC1") +
+  scale_x_discrete(labels = as.character(1:8)) +
               theme_minimal()
 
-# Create a data frame with the first principal component and the species
-pca_comp2 <- data.frame(PC2 = pca_ind$coord[, 2], 
-                     LeftScale = as.factor(polNumImp[,13]))  # Adjust based on your grouping variable
-
 # Create boxplot of the first principal component
-boxplotL2 <- ggplot(pca_comp2, aes(x = LeftScale, y = PC2)) +
+boxplotL2 <- ggplot(pca_comps, aes(x = LeftScale, y = PC2)) +
               geom_boxplot(fill = "lightblue", color = "darkblue") +
               labs(title = "Boxplot of PC2 - mLeft",
                    x = "mLeft", 
                    y = "PC2") +
+  scale_x_discrete(labels = as.character(1:8)) +
               theme_minimal()
 
-# Create a data frame with the second principal component and the species
-pca_comp2 <- data.frame(PC2 = pca_ind$coord[, 2], 
-                     RightScale = as.factor(polNumImp[,14]))  # Adjust based on your grouping variable
-
 # Create boxplot of the first principal component
-boxplotR2 <- ggplot(pca_comp2, aes(x = RightScale, y = PC2)) +
+boxplotR2 <- ggplot(pca_comps, aes(x = RightScale, y = PC2)) +
               geom_boxplot(fill = "lightgreen", color = "darkgreen") +
               labs(title = "Boxplot of PC2 - mRight",
                    x = "mRight", 
                    y = "PC2") +
+  scale_x_discrete(labels = as.character(1:8)) +
               theme_minimal()
 
 grid.arrange(boxplotL1, boxplotR1, boxplotL2, boxplotR2, ncol = 2, nrow = 2)
@@ -236,39 +238,158 @@ Answer this question by looking at whether the way they are correlated relates t
 
 #### Plot the first principal component against each of mLeft and mRight, and add bootstrapped loess curves to the plots;
 
-Should we do this for scaled data or not? I will assume it is scaled data.
+I will be continuing with the scaled dataset for the sake of consistency.
 
-How the heck am I supposed to add a loess curve to this plot loool doesn't look good.
+For more information on *loess* smoothing look at Slide 20 of Assignment 15.
 
-Slide 20 of Assignment 15.
+Now adding a *loess* curve using bootstrap. First do it for `mLeft` as illustration. Still unsure of what value to use for the `span` parameter.
+
+We noted earlier that our dataset doesn't have any duplicate cases so we resample cases and not residuals.
+
+Not sure why the x-axis labels aren't showing but at least the plot is still easily interpretable.
 
 ```{r}
 # Create a data frame with the first principal component and the response variable (Species)
-pc1_left <- data.frame(PC1 = pca_ind$coord[, 1], 
-                     mLeft = polNumImp$mLeft,
-                     mRight = polNumImp$mRight)  # Replace with your response variables
+pc1_data <- data.frame(PC1 = pca_ind$coord[, 1], 
+                     mLeft = pol_scaled$mLeft,
+                     mRight = pol_scaled$mRight)  # Replace with your response variables
+# Set the seed
+set.seed(777)
 
-# Plot PC1 against mLeft
-PC1mLeft <- ggplot(pc1_left, aes(x = PC1, y = mLeft)) +
-              geom_point(aes(color = mLeft), size = 2) +
-              scale_color_gradient(low = "blue", high = "red") +  # Optional color gradient
-              labs(title = "PC1 vs. mLeft",
-                   x = "PC1", 
-                   y = "mLeft") +
-              theme_minimal()
+# Number of bootstrap samples
+B <- 200
 
-# Plot PC1 against mRight
-PC1mRight <- ggplot(pc1_left, aes(x = PC1, y = mRight)) +
-              geom_point(aes(color = mRight), size = 2) +
-              scale_color_gradient(low = "green", high = "purple") +  # Optional color gradient
-              labs(title = "PC1 vs. mRight",
-                   x = "PC1", 
-                   y = "mRight") +
-              theme_minimal()
-grid.arrange(PC1mLeft, PC1mRight, ncol = 2)
+# Grid of x values where the LOESS curve will be estimated
+x_seq <- sort(unique(pc1_data$mLeft))
+
+# Matrix to store LOESS predictions for each bootstrap sample
+loess_preds <- matrix(NA, nrow = length(x_seq), ncol = B)
+
+# Perform bootstrap sampling and fit LOESS models
+for (b in 1:B) {
+  # Generate a bootstrap sample from the data
+  boot_sample <- data.frame(pc1_data[sample(1:nrow(pc1_data), replace = TRUE), ])
+  
+  # Fit LOESS model to the bootstrap sample
+  loess_fit <- loess(PC1 ~ mLeft, data = boot_sample, span = 0.75)
+  
+  # Predict y values for the grid of x values
+  loess_preds[, b] <- predict(loess_fit, newdata = data.frame(mLeft = x_seq))
+}
+
+# Adaptive estimation: Average the predictions across bootstrap samples
+loess_adaptive_estimate <- rowMeans(loess_preds, na.rm = TRUE)
+loess_curve <- data.frame(x = x_seq, y = loess_adaptive_estimate)
+
+# Create a data frame for all the bootstrap LOESS curves
+loess_bootstrap_df <- data.frame(
+  x = rep(x_seq, B),
+  y = as.vector(loess_preds),
+  group = rep(1:B, each = length(x_seq))
+)
+
+# Plot original data, all bootstrap LOESS curves, and adaptive LOESS estimate
+ggplot(pc1_data, aes(x = mLeft, y = PC1)) +
+  geom_point(aes(color = mLeft), alpha = 0.5) +  # Scatter plot
+  scale_color_gradient(low = "turquoise", high = "salmon") +  # Optional color gradient
+  geom_line(data = loess_bootstrap_df, aes(x = x, y = y, group = group),
+            color = "lightblue", size = 0.5, alpha = 0.2) +  # Bootstrap LOESS curves
+  geom_line(data = loess_curve, aes(x = x, y = y), color = "dodgerblue4", size = 1) +  # Adaptive LOESS curve
+  labs(title = "Bootstrapped LOESS Curve",
+       x = "mLeft", y = "PC1") + 
+  scale_x_discrete(labels = as.character(1:8))
+
+
+#### NOW LOESS CURVE FITTED TO MRIGHT ###
+
+x_seq <- sort(unique(pc1_data$mRight))
+
+# Matrix to store LOESS predictions for each bootstrap sample
+loess_preds <- matrix(NA, nrow = length(x_seq), ncol = B)
+
+# Perform bootstrap sampling and fit LOESS models
+for (b in 1:B) {
+  # Generate a bootstrap sample from the data
+  boot_sample <- data.frame(pc1_data[sample(1:nrow(pc1_data), replace = TRUE), ])
+  
+  # Fit LOESS model to the bootstrap sample
+  loess_fit <- loess(PC1 ~ mRight, data = boot_sample, span = 0.75)
+  
+  # Predict y values for the grid of x values
+  loess_preds[, b] <- predict(loess_fit, newdata = data.frame(mRight = x_seq))
+}
+
+# Adaptive estimation: Average the predictions across bootstrap samples
+loess_adaptive_estimate <- rowMeans(loess_preds, na.rm = TRUE)
+loess_curve <- data.frame(x = x_seq, y = loess_adaptive_estimate)
+
+# Create a data frame for all the bootstrap LOESS curves
+loess_bootstrap_df <- data.frame(
+  x = rep(x_seq, B),
+  y = as.vector(loess_preds),
+  group = rep(1:B, each = length(x_seq))
+)
+
+# Plot original data, all bootstrap LOESS curves, and adaptive LOESS estimate
+ggplot(pc1_data, aes(x = mRight, y = PC1)) +
+  geom_point(aes(color = mRight), alpha = 0.5) +  # Scatter plot
+  scale_color_gradient(low = "turquoise", high = "salmon") +  # Optional color gradient
+  geom_line(data = loess_bootstrap_df, aes(x = x, y = y, group = group),
+            color = "pink", size = 0.5, alpha = 0.2) +  # Bootstrap LOESS curves
+  geom_line(data = loess_curve, aes(x = x, y = y), color = "magenta4", size = 1) +  # Adaptive LOESS curve
+  labs(title = "Bootstrapped LOESS Curve",
+       x = "mRight", y = "PC1") +
+  scale_x_discrete(labels = as.character(1:8))
+
 ```
 
+From the *loess* curves it seems that the majority of the uncertainty lies around point 6 on the `mLeft` and `mRight` scale. This should be investigated.
+
 #### Decide on a suitable model and fit a model predicting PC1 from mLeft and mRight.
+
+From the plots above, the curves look very linear.
+
+The covariates are random and not fixed (even though the scale is fixed), so we use case resampling and not residual resampling. But when I fit my model, I need to remember to look at the *heteroschedasticity* of the model!
+
+Test out a linear model.
+
+First look at the normality of the response variable. From the histogram it looks super normally distributed so we don't have to use GLMs, we can just do normal linear model
+
+```{r}
+ggplot(pc1_data, aes(x = PC1)) +
+  geom_histogram(binwidth = 0.75, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Histogram of PC1 response",
+       x = "PC1",
+       y = "Count") +
+  theme_minimal()
+```
+
+Now fit the linear model and from the residual plot we can see that there is no heteroschedasticity. This means that we don't need to use wild bootstrap in our resampling procedure.
+
+```{r}
+linmod0 <- lm(PC1 ~ 1+ mLeft + mRight + mLeft*mRight, data = pc1_data)
+summary(linmod0)
+
+# remove the interaction and intercept
+linmod1 <- lm(PC1 ~ mLeft + mRight - 1, data = pc1_data)
+summary(linmod1)
+
+# Extract residuals
+modres <- linmod1$residuals
+
+# Create a data frame for plotting
+residuals_data <- data.frame(modres)
+
+# Plot the residuals
+ggplot(residuals_data, aes(x = 1:nrow(residuals_data), y = modres)) +
+  geom_point(size = 0.75) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Residuals Plot",
+       x = "Index",
+       y = "Residuals") +
+  theme_minimal()
+```
+
 
 #### Could the predicted value $\hat{y}$ from this model function as a smoothed composite of mLeft and mRight? Why or why not?
 
