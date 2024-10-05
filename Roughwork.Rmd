@@ -2,7 +2,16 @@
 title: "Practical Project 1"
 author: "M Meyer (22675760)"
 date: "2024-10-01"
-output: html_document
+output:
+  bookdown::gitbook:
+    number_sections: FALSE
+    toc_depth: 4  # Adjust depth if needed
+    config:
+      toc:
+        scroll_highlight: true
+        before: null
+        after: null
+      sidebar: true  # Adds a sidebar for the table of contents
 ---
 
 ```{r setup, include=FALSE}
@@ -39,11 +48,14 @@ library(mgcv)
 library(MASS)
 library(pvclust)
 library(boot)
+library(fpc)
+
+# install.packages("bookdown")
 ```
 
 *Remember to set the specific variables as ordinal variables!! Look at data description.*
 
-## Expected Analyses
+## Expected Analyses {.unnumbered}
 
 Each of the 4 sections should contain at least one application of resampling. Provide the details in your technical report; your report to your friend only needs to show as much as you need to demonstrate to him whether the approach "worked" or not.
 
@@ -52,7 +64,6 @@ Before starting with the analyses, I just check whether there are any duplicated
 ```{r}
 sum(duplicated(poldat))
 ```
-
 
 ### 1. Handle the missing values in the dataset in a way that you feel is justified in the circumstances (include details in technical report; use resampling)
 
@@ -370,7 +381,6 @@ ggplot(pc1_data, aes(x = PC1)) +
   theme_minimal()
 ```
 
-
 Now fit the linear model and from the residual plot we can see that there is no heteroschedasticity. This means that we don't need to use wild bootstrap in our resampling procedure.
 
 From the model output, the $R^2$ isn't amazing, but combined with the low p-value it shows the model is a good fit. However the low $R^2$ might be related to the fact that the discreteness of the estimated responses leads to a loss of information and limits the response to a set of values that is much smaller than the original response.
@@ -407,7 +417,7 @@ ggplot(residuals_data, aes(x = modres)) +
   theme_minimal()
 ```
 
-Use bootstrap to investigate the standard errors of the model parameters. Note that when you do bootstrap on this, you assume the model form is correct. 
+Use bootstrap to investigate the standard errors of the model parameters. Note that when you do bootstrap on this, you assume the model form is correct.
 
 Note that the estimate for $\sigma^2$ relies on the model being correct. So if our assumption of a linear relationship was wrong, then our $\widehat \sigma^2$ would have been inflated. There is a good correspondence between bootstrap standard error and that from the model output, which is an indicator of a good model fit.
 
@@ -509,11 +519,10 @@ The GAM's predicted value can be seen as a smoothed composite as it maintains th
 
 Look into the package `pvclust`, it is referred to in an article that we discuss in our class Assignment.
 
-Also note the notion of **Multiscale** bootstrap. The package `fcp` is a comprehensive and flexible package in this context. Note that `fcp::clusterboot()` calculates cluster stability indices using various methods, including bootstrap. 
+Also note the notion of **Multiscale** bootstrap. The package `fcp` is a comprehensive and flexible package in this context. Note that `fcp::clusterboot()` calculates cluster stability indices using various methods, including bootstrap.
 
 ```{r}
 
 ```
-
 
 #### Profile the clusters you find and decide for each cluster where on the political spectrum you would place it. Do the cluster profiles agree with expected political spectrum patterns?
