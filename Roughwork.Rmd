@@ -33,6 +33,12 @@ library(ggplot2)
 library(bipl5)
 library(factoextra) # For PCA visualization
 library(gridExtra)
+library(randomForest)
+library(plotly)
+library(mgcv)
+library(MASS)
+library(pvclust)
+library(boot)
 ```
 
 *Remember to set the specific variables as ordinal variables!! Look at data description.*
@@ -364,7 +370,10 @@ ggplot(pc1_data, aes(x = PC1)) +
   theme_minimal()
 ```
 
+
 Now fit the linear model and from the residual plot we can see that there is no heteroschedasticity. This means that we don't need to use wild bootstrap in our resampling procedure.
+
+From the model output, the $R^2$ isn't amazing, but combined with the low p-value it shows the model is a good fit. However the low $R^2$ might be related to the fact that the discreteness of the estimated responses leads to a loss of information and limits the response to a set of values that is much smaller than the original response.
 
 ```{r}
 linmod0 <- lm(PC1 ~ 1+ mLeft + mRight + mLeft*mRight, data = pc1_data)
@@ -373,6 +382,7 @@ summary(linmod0)
 # remove the interaction and intercept
 linmod1 <- lm(PC1 ~ mLeft + mRight - 1, data = pc1_data)
 summary(linmod1)
+AIC(linmod1)
 
 # Extract residuals
 modres <- linmod1$residuals
@@ -388,13 +398,122 @@ ggplot(residuals_data, aes(x = 1:nrow(residuals_data), y = modres)) +
        x = "Index",
        y = "Residuals") +
   theme_minimal()
+
+ggplot(residuals_data, aes(x = modres)) +
+  geom_histogram(bins=15, fill = "lightblue3", color = "black", alpha = 0.7) +
+  labs(title = "Histogram of PC1 response",
+       x = "Residuals",
+       y = "Count") +
+  theme_minimal()
 ```
 
+Use bootstrap to investigate the standard errors of the model parameters. Note that when you do bootstrap on this, you assume the model form is correct. 
+
+Note that the estimate for $\sigma^2$ relies on the model being correct. So if our assumption of a linear relationship was wrong, then our $\widehat \sigma^2$ would have been inflated. There is a good correspondence between bootstrap standard error and that from the model output, which is an indicator of a good model fit.
+
+The bias is also quite small, which is good.
+
+```{r}
+boot.fn  = function(data, index) return(coef(lm(PC1 ~ mLeft + mRight - 1, data = data, subset = index)))
+
+boot(pc1_data, boot.fn, 500)
+```
+
+3D Plot:
+
+```{r warning=FALSE}
+# Create a grid of values for mRight and mLeft
+mRight_grid <- sort(unique(pc1_data$mRight))
+mLeft_grid <- sort(unique(pc1_data$mLeft))
+
+# Create a grid for prediction
+grid <- expand.grid(mLeft = mLeft_grid, mRight = mRight_grid)
+
+# Predict PC1 on the grid
+grid$PC1 <- predict(linmod1, newdata = grid)
+
+# Convert the predicted values into a matrix to use for plotting the surface
+PC1_matrix <- matrix(grid$PC1, nrow = length(mRight_grid), ncol = length(mLeft_grid))
+
+# Plot the original data points in 3D and overlay the linear model plane
+plot_ly() %>%
+  add_markers(data = pc1_data, x = ~mRight, y = ~mLeft, z = ~PC1, color = ~PC1,
+              colors = "Blues", marker = list(size = 2)) %>%
+  add_surface(x = ~mRight_grid, y = ~mLeft_grid, z = ~PC1_matrix, 
+              showscale = FALSE, opacity = 0.5) %>%
+  layout(scene = list(xaxis = list(title = 'mRight'),
+                      yaxis = list(title = 'mLeft'),
+                      zaxis = list(title = 'PC1')),
+         title = "3D Plot of Data with Linear Model Overlay")
+```
+
+Next, we consider a Generalized Additive Model (GAM) to address the issue of the discreteness of the response.GAMs extend linear models by allowing the relationship between the predictors and the response to be non-linear. They can model more flexible relationships while maintaining the continuity of the response variable.
+
+The default value of `family=gaussian()` is used since our response variable is continuous and normally distributed (as seen in the histogram from earlier). For the Gaussian family, the method used to fit the model is Generalized Cross-Validation and uses Mallow's $C_p$ criterion to penalize the model for complexity. This adjusted version of GCV includes a bias-correction term that improves model selection when fitting a Generalized Additive Model (GAM). We use the `identity` link function, since the response variable is continuous and unbounded.
+
+We set `k=8` to reduce the number of basis functions to match the number of unique values, which means it tries to estimate up to 7 degrees of freedom.
+
+The AIC for the GAM is slightly better (lower) than the linear model, so we choose this as our model. The intercept term is removed since it is not statistically significant.
+
+*Although I feel like I'm still not 100% sure of how this function works. So look into the theory behind it so that I can defend my work.*
+
+```{r}
+gam_model0 <- gam(PC1 ~ s(mLeft, k=8) + s(mRight, k=8), data = pc1_data)
+summary(gam_model0)
+AIC(gam_model0)
+
+gam_model1 <- gam(PC1 ~ s(mLeft, k=8) + s(mRight, k=8) -1, data = pc1_data)
+summary(gam_model1)
+AIC(gam_model1)
+
+boot.gam  = function(data, index) return(coef(gam(PC1 ~ s(mLeft, k=8) + s(mRight, k=8) -1, data = data, subset = index)))
+
+boot(pc1_data, boot.gam, 500)
+```
+
+3D Plot:
+
+```{r}
+# Create a grid for prediction
+grid2 <- expand.grid(mLeft = mLeft_grid, mRight = mRight_grid)
+
+# Predict PC1 on the grid
+grid2$PC1 <- predict(gam_model1, newdata = grid2)
+
+# Convert the predicted values into a matrix to use for plotting the surface
+PC1_matrix2 <- matrix(grid2$PC1, nrow = length(mRight_grid), ncol = length(mLeft_grid))
+
+# Plot the original data points in 3D and overlay the linear model plane
+plot_ly() %>%
+  add_markers(data = pc1_data, x = ~mRight, y = ~mLeft, z = ~PC1, color = ~PC1,
+              colors = "Blues", marker = list(size = 2)) %>%
+  add_surface(x = ~mRight_grid, y = ~mLeft_grid, z = ~PC1_matrix2, 
+              showscale = FALSE, opacity = 0.5) %>%
+  layout(scene = list(xaxis = list(title = 'mRight'),
+                      yaxis = list(title = 'mLeft'),
+                      zaxis = list(title = 'PC1')),
+         title = "3D Plot of Data with Linear Model Overlay")
+```
 
 #### Could the predicted value $\hat{y}$ from this model function as a smoothed composite of mLeft and mRight? Why or why not?
+
+I think it depends on what you see as smooth, because using a linear model means with predictor variables that are discrete, means that our response can only take on $8^2=64$ unique values. As mentioned earlier, this discreteness could lead to a loss of information, since the model isn't able to cover the whole range of the possible response values.
+
+The GAM's predicted value can be seen as a smoothed composite as it maintains the continuity of `PC1` while taking the discrete inputs.
 
 ### 4. Investigate whether a cluster-based solution would be a better option:
 
 #### Form clusters using the method you think would be most suited to the problem, and evaluate the quality of the clustering. As these are convenience clusters, you may prefer to use the more sharply separated cluster allocations from e.g. a discriminant analysis.
+
+**For more information on clustering and bootstrap, look at Assignment 13a.**
+
+Look into the package `pvclust`, it is referred to in an article that we discuss in our class Assignment.
+
+Also note the notion of **Multiscale** bootstrap. The package `fcp` is a comprehensive and flexible package in this context. Note that `fcp::clusterboot()` calculates cluster stability indices using various methods, including bootstrap. 
+
+```{r}
+
+```
+
 
 #### Profile the clusters you find and decide for each cluster where on the political spectrum you would place it. Do the cluster profiles agree with expected political spectrum patterns?
