@@ -270,6 +270,11 @@ Not sure why the x-axis labels aren't showing but at least the plot is still eas
 pc1_data <- data.frame(PC1 = pca_ind$coord[, 1], 
                      mLeft = pol_scaled$mLeft,
                      mRight = pol_scaled$mRight)  # Replace with your response variables
+
+pc12_data <- data.frame(PC1 = pca_ind$coord[, 1], 
+                        PC2 = pca_ind$coord[, 2],
+                     mLeft = pol_scaled$mLeft,
+                     mRight = pol_scaled$mRight)  # Replace with your response variables
 # Set the seed
 set.seed(777)
 
@@ -310,7 +315,7 @@ ggplot(pc1_data, aes(x = mLeft, y = PC1)) +
   geom_point(aes(color = mLeft), alpha = 0.5) +  # Scatter plot
   scale_color_gradient(low = "turquoise", high = "salmon") +  # Optional color gradient
   geom_line(data = loess_bootstrap_df, aes(x = x, y = y, group = group),
-            color = "lightblue", size = 0.5, alpha = 0.2) +  # Bootstrap LOESS curves
+            color = "lightblue", linewidth = 0.5, alpha = 0.2) +  # Bootstrap LOESS curves
   geom_line(data = loess_curve, aes(x = x, y = y), color = "dodgerblue4", size = 1) +  # Adaptive LOESS curve
   labs(title = "Bootstrapped LOESS Curve",
        x = "mLeft", y = "PC1") + 
@@ -352,7 +357,7 @@ ggplot(pc1_data, aes(x = mRight, y = PC1)) +
   geom_point(aes(color = mRight), alpha = 0.5) +  # Scatter plot
   scale_color_gradient(low = "turquoise", high = "salmon") +  # Optional color gradient
   geom_line(data = loess_bootstrap_df, aes(x = x, y = y, group = group),
-            color = "pink", size = 0.5, alpha = 0.2) +  # Bootstrap LOESS curves
+            color = "pink", linewidth = 0.5, alpha = 0.2) +  # Bootstrap LOESS curves
   geom_line(data = loess_curve, aes(x = x, y = y), color = "magenta4", size = 1) +  # Adaptive LOESS curve
   labs(title = "Bootstrapped LOESS Curve",
        x = "mRight", y = "PC1") +
@@ -521,7 +526,67 @@ Look into the package `pvclust`, it is referred to in an article that we discuss
 
 Also note the notion of **Multiscale** bootstrap. The package `fcp` is a comprehensive and flexible package in this context. Note that `fcp::clusterboot()` calculates cluster stability indices using various methods, including bootstrap.
 
+---
+
+I am unsure of whether we should use all the variables in the clustering procedure or only `mRight` and `mLeft`....
+
+Using `nselectboot` on the original dataset, we find that it just takes the maximum number of clusters that it can, so that is not helpful.
+
+We also try it on the data with the first two principal components, as well as `mRight` and `mLeft`. But now we sit with the problem of still having way too many clusters...
+
+**We will be using hierarchical clustering as the clusters are not necessarily well-separated and and also not necessarily spherical.**
+
+Use **average linkage** as it provides a balance between the extremes of single linkage (which can form long chain-like clusters) and complete linkage (which can form very tight clusters). This method doesn’t force clusters to be as well-separated as complete linkage. It allows for some shading between clusters, which is fine since we don't mind the shading in this case. Unlike single linkage, which might create many small, poorly-separated clusters, average linkage tends to produce a reasonable number of clusters that are not overly compact or fragmented.
+
 ```{r}
+d <- dist(pol_scaled0)  # Euclidean distance by default
+
+# Average linkage
+hc_result <- hclust(d, method = "average")
+
+# Plot the dendrogram
+plot(hc_result)
+rect.hclust(hc_result, k = 5)  # Highlight clusters; adjust 'k' as needed
+
+d1 <- dist(pc1_data)  # Euclidean distance by default
+
+# Average linkage
+hc_result1 <- hclust(d1, method = "average")
+
+# Plot the dendrogram
+plot(hc_result1)
+rect.hclust(hc_result1, k = 5)  # Highlight clusters; adjust 'k' as needed
+
+```
+
+See that $k=3$ has the lowest instability, so we stick to that, although we display both of them for safety.
+
+```{r}
+set.seed(777)
+
+nclust0 <- nselectboot(data = pol_scaled0, B=100, clustermethod = hclustCBI, 
+            method = "average", krange = 4:10)
+
+nclust0$kopt
+nclust0$stabk #get the instability values
+
+cl3 <- clusterboot(data = pol_scaled0, B=200, bootmethod = c("boot"),
+                      clustermethod = hclustCBI, method = "average", k = 3, seed=777)
+cl4 <- clusterboot(data = pol_scaled0, B=200, bootmethod = c("boot"),
+                      clustermethod = hclustCBI, method = "average", k = 4, seed=777)
+cl5 <- clusterboot(data = pol_scaled0, B=200, bootmethod = c("boot"),
+                      clustermethod = hclustCBI, method = "average", k = 5, seed=777)
+cl6 <- clusterboot(data = pol_scaled0, B=200, bootmethod = c("boot"),
+                      clustermethod = hclustCBI, method = "average", k = 6, seed=777)
+
+# 5 was the largest for which it didn't give an error...
+
+print(cl3)
+print(cl4)
+print(cl5)
+print(cl6)
+
+cl6$result$partition
 
 ```
 
