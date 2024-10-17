@@ -17,8 +17,8 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-poldat <- read.csv("Political spectrum.csv", header=TRUE)
-poldat <- poldat[,-1]
+poldata <- read.csv("Political spectrum.csv", header=TRUE)
+poldat <- poldata[,-1]
 # Save the numeric version before making some variables factors.
 polnum <- poldat
 
@@ -49,6 +49,10 @@ library(MASS)
 library(pvclust)
 library(boot)
 library(fpc)
+library(ggcorrplot)  # For better correlation matrix visualization
+library(GGally)
+library(dplyr)
+library(ggdensity)
 
 # install.packages("bookdown")
 ```
@@ -64,6 +68,7 @@ Before starting with the analyses, I just check whether there are any duplicated
 ```{r}
 sum(duplicated(poldat))
 ```
+
 
 ### 1. Handle the missing values in the dataset in a way that you feel is justified in the circumstances (include details in technical report; use resampling)
 
@@ -120,6 +125,16 @@ legend(1.5,.4, legend = kernels, col = seq(kernels),
        lty = 1, cex = .8, y.intersp = 1)
 ```
 
+Also look at correlation between variables now that the missing values have been imputed.
+
+```{r}
+# Compute the correlation matrix
+cor_matrix <- cor(polNumImp)
+
+# Plot the correlation matrix
+ggcorrplot(cor_matrix, lab = TRUE)
+```
+
 ### 2. Conduct a principal components analysis using all the variables in the dataset:
 
 #### Investigate the proportion of variation explained by the first or the first two components (some definitions of the political spectrum use economic and social axes separately)
@@ -155,6 +170,7 @@ fviz_pca_var(pca_result,
              col.var = "contrib", # Color by contributions to the PCs
              gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"))
 
+sort(abs((pca_result$rotation)[,1]), decreasing = T)
 ```
 
 When two vectors are close, forming a small angle, the two variables they represent are positively correlated.
@@ -539,23 +555,15 @@ We also try it on the data with the first two principal components, as well as `
 Use **average linkage** as it provides a balance between the extremes of single linkage (which can form long chain-like clusters) and complete linkage (which can form very tight clusters). This method doesn’t force clusters to be as well-separated as complete linkage. It allows for some shading between clusters, which is fine since we don't mind the shading in this case. Unlike single linkage, which might create many small, poorly-separated clusters, average linkage tends to produce a reasonable number of clusters that are not overly compact or fragmented.
 
 ```{r}
-d <- dist(pol_scaled0)  # Euclidean distance by default
+d <- dist(pol_scaled)  # Euclidean distance by default
 
 # Average linkage
-hc_result <- hclust(d, method = "average")
+# hc_result <- hclust(d, method = "average")
+hc_result <- hclust(d, method = "ward.D")
 
 # Plot the dendrogram
 plot(hc_result)
-rect.hclust(hc_result, k = 5)  # Highlight clusters; adjust 'k' as needed
-
-d1 <- dist(pc1_data)  # Euclidean distance by default
-
-# Average linkage
-hc_result1 <- hclust(d1, method = "average")
-
-# Plot the dendrogram
-plot(hc_result1)
-rect.hclust(hc_result1, k = 5)  # Highlight clusters; adjust 'k' as needed
+rect.hclust(hc_result, k = 4)  # Highlight clusters; adjust 'k' as needed
 
 ```
 
@@ -564,20 +572,22 @@ See that $k=3$ has the lowest instability, so we stick to that, although we disp
 ```{r}
 set.seed(777)
 
-nclust0 <- nselectboot(data = pol_scaled0, B=100, clustermethod = hclustCBI, 
-            method = "average", krange = 4:10)
+nclust0 <- nselectboot(data = pol_scaled, B=100, clustermethod = hclustCBI, 
+            method = "ward.D", krange = 3:10)
 
 nclust0$kopt
 nclust0$stabk #get the instability values
 
-cl3 <- clusterboot(data = pol_scaled0, B=200, bootmethod = c("boot"),
-                      clustermethod = hclustCBI, method = "average", k = 3, seed=777)
-cl4 <- clusterboot(data = pol_scaled0, B=200, bootmethod = c("boot"),
-                      clustermethod = hclustCBI, method = "average", k = 4, seed=777)
-cl5 <- clusterboot(data = pol_scaled0, B=200, bootmethod = c("boot"),
-                      clustermethod = hclustCBI, method = "average", k = 5, seed=777)
-cl6 <- clusterboot(data = pol_scaled0, B=200, bootmethod = c("boot"),
-                      clustermethod = hclustCBI, method = "average", k = 6, seed=777)
+cl3 <- clusterboot(data = pol_scaled, B=200, bootmethod = c("boot"),
+                      clustermethod = hclustCBI, method = "ward.D", k = 3, seed=777)
+
+cl4 <- clusterboot(data = pol_scaled, B=200, bootmethod = c("boot"),
+                      clustermethod = hclustCBI, method = "ward.D", k = 4, seed=777)
+
+cl5 <- clusterboot(data = pol_scaled, B=200, bootmethod = c("boot"),
+                      clustermethod = hclustCBI, method = "ward.D", k = 5, seed=777)
+cl6 <- clusterboot(data = pol_scaled, B=200, bootmethod = c("boot"),
+                      clustermethod = hclustCBI, method = "ward.D", k = 6, seed=777)
 
 # 5 was the largest for which it didn't give an error...
 
@@ -586,8 +596,151 @@ print(cl4)
 print(cl5)
 print(cl6)
 
-cl6$result$partition
+# Visualizing the dendrogram
+# Image saved and not printed here, because it takes a lot of time to render
+
+# fviz_dend(hc_result, k = 4, # Cut into 4 clusters
+#           rect = TRUE,
+#           show_labels = FALSE)
+
+# scaled data with cluster assignments
+clusterdat <- cbind(pol_scaled,clustergroup= as.factor(cl4$result$partition))
+# original data with cluster assignments
+polclust <- cbind(polNumImp,clustergroup= as.factor(cl4$result$partition))
+
+# Select a subset of predictors to visualize (adjust as needed)
+selected_predictors <- polclust[, c("Environment", 
+                                      "Economic", "wantPossible", "ownAll",
+                                      "Change", "lawsPeople", "clustergroup")]
+
+# Create pairwise plots
+# ggpairs(selected_predictors, aes(color = as.factor(clustergroup)))
+
 
 ```
+
+Now we rather use the unscaled data and the summary statistics for the interpretation, otherwise it is difficult to see whether a cluster is really left or right.
+
+```{r}
+ggplot(data = polclust, aes(x = Economic, y = wantPossible, fill = clustergroup)) +
+  geom_hdr(xlim = c(-10, 110), ylim = c(-10, 110),
+           probs = c(0.75,0.5, 0.25)) +
+  geom_point(shape=21) +  # Points with some transparency
+  labs(title = "Scatter Plot of Economic vs How people live",
+       x = "Economic",
+       y = "Want - Possible",
+       color = "Cluster Group",  # For points
+       fill = "Cluster Group") +  # For density polygons
+  theme_minimal() +  # Use a minimal theme
+  scale_color_brewer(palette = "Set2") +  # Color for points
+  scale_fill_brewer(palette = "Set2")  # Color for shading
+
+ggplot(data = polclust, aes(x = Economic, y = lawsPeople, fill = clustergroup)) +
+  geom_hdr(xlim = c(-10, 110), ylim = c(-10, 110),
+           probs = c(0.75,0.5, 0.25)) +
+  geom_point(shape=21) +  # Points with some transparency
+  labs(title = "Scatter Plot of Economic vs Better laws/people",
+       x = "Economic",
+       y = "Better laws vs better people",
+       color = "Cluster Group",  # For points
+       fill = "Cluster Group") +  # For density polygons
+  theme_minimal() +  # Use a minimal theme
+  scale_color_brewer(palette = "Set2") +  # Color for points
+  scale_fill_brewer(palette = "Set2")  # Color for shading
+
+ggplot(data = polclust, aes(x = Environment, y = wantPossible, fill = clustergroup)) +
+  geom_hdr(xlim = c(-10, 110), ylim = c(-10, 110),
+           probs = c(0.75,0.5, 0.25)) +
+  geom_point(shape=21) +  # Points with some transparency
+  labs(title = "Scatter Plot of Environment vs How people live",
+       x = "Environment",
+       y = "Want - Possible",
+       color = "Cluster Group",  # For points
+       fill = "Cluster Group") +  # For density polygons
+  theme_minimal() +  # Use a minimal theme
+  scale_color_brewer(palette = "Set2") +  # Color for points
+  scale_fill_brewer(palette = "Set2")  # Color for shading
+
+ggplot(data = polclust, aes(x = Change, y = wantPossible, fill = clustergroup)) +
+  geom_hdr(probs = c(0.75,0.5, 0.25)) +
+  geom_point(shape=21) +  # Points with some transparency
+  labs(title = "Scatter Plot of Change vs How people live",
+       x = "Change",
+       y = "Want - Possible",
+       color = "Cluster Group",  # For points
+       fill = "Cluster Group") +  # For density polygons
+  theme_minimal() +  # Use a minimal theme
+  scale_color_brewer(palette = "Set2") +  # Color for points
+  scale_fill_brewer(palette = "Set2")  # Color for shading
+
+ggplot(data = polclust, aes(x = ownAll, y = wantPossible, fill = clustergroup)) +
+  geom_hdr(xlim = c(-10, 110), ylim = c(-10, 110),
+           probs = c(0.75,0.5, 0.25)) +
+  geom_point(shape=21) +  # Points with some transparency
+  labs(title = "Scatter Plot of ownAll vs How people live",
+       x = "ownAll",
+       y = "Want - Possible",
+       color = "Cluster Group",  # For points
+       fill = "Cluster Group") +  # For density polygons
+  theme_minimal() +  # Use a minimal theme
+  scale_color_brewer(palette = "Set2") +  # Color for points
+  scale_fill_brewer(palette = "Set2")  # Color for shading
+
+ggplot(data = polclust, aes(x = LGBT, y = Environment, fill = clustergroup)) +
+  geom_hdr(xlim = c(-2, 10), ylim = c(-10, 110),
+           probs = c(0.75,0.5, 0.25)) +
+  geom_point(shape=21) +  # Points with some transparency
+  labs(title = "Scatter Plot of LGBT vs Environment",
+       x = "LGBT",
+       y = "Environment",
+       color = "Cluster Group",  # For points
+       fill = "Cluster Group") +  # For density polygons
+  theme_minimal() +  # Use a minimal theme
+  scale_color_brewer(palette = "Set2") +  # Color for points
+  scale_fill_brewer(palette = "Set2")  # Color for shading
+
+ggplot(data = polclust, aes(x = LGBT, y = mRight, fill = clustergroup)) +
+  geom_hdr(xlim = c(-2, 10), ylim = c(-2, 10),
+           probs = c(0.75,0.5, 0.25)) +
+  geom_point(shape=21) +  # Points with some transparency
+  labs(title = "Scatter Plot of LGBT vs mRight",
+       x = "LGBT",
+       y = "mRight",
+       color = "Cluster Group",  # For points
+       fill = "Cluster Group") +  # For density polygons
+  theme_minimal() +  # Use a minimal theme
+  scale_color_brewer(palette = "Set2") +  # Color for points
+  scale_fill_brewer(palette = "Set2")  # Color for shading
+
+
+ggplot(data = polclust, aes(x = mLeft, y = mRight, fill = clustergroup)) +
+  geom_hdr(xlim = c(-2, 10), ylim = c(-2, 10),
+           probs = c(0.75,0.5, 0.25)) +
+  geom_point(shape=21) +  # Points with some transparency
+  labs(title = "Scatter Plot of mLeft vs mRight",
+       x = "mLeft",
+       y = "mRight",
+       color = "Cluster Group",  # For points
+       fill = "Cluster Group") +  # For density polygons
+  theme_minimal() +  # Use a minimal theme
+  scale_color_brewer(palette = "Set2") +  # Color for points
+  scale_fill_brewer(palette = "Set2")  # Color for shading
+```
+
+Get the summary statistics for the clusters:
+
+```{r}
+# Get the average for each predictor variable by cluster
+clusterdat_summary <- polclust %>%
+  group_by(clustergroup) %>%
+  summarise(across(c(Economic, Environment, wantPossible, unityDifferences, 
+                     lawsPeople, ownAll, pCongress, pBusiness, tCongress, 
+                     tBusiness, Change, LGBT, mLeft, mRight), 
+                   \(x) mean(x, na.rm = TRUE)))
+
+# View the result
+print(clusterdat_summary)
+```
+
 
 #### Profile the clusters you find and decide for each cluster where on the political spectrum you would place it. Do the cluster profiles agree with expected political spectrum patterns?
